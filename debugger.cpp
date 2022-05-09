@@ -21,9 +21,12 @@ class Debugger {
 
     public:
         Debugger(char *prog_name, pid_t id) {
+            // Construct the Debugger object with the name of the program to be debugged
+            // and the process ID of the debugger
             program_name = prog_name;
             pid = id;
 
+            // Create a vector of valid commands to be checked against every time the user tries to enter a command
             int num_commands = 2;
             string commands[] = {"quit", "continue"};
             for (int i = 0; i < num_commands; i++) {
@@ -32,8 +35,10 @@ class Debugger {
         }
 
         void run() {
+            // Begin execution of the *debugger*, not the program to be debugged
             cout << "Running program\n";
 
+            // Wait until control is passed back to the debugger process
             int wait_status;
             int options = 0;
             waitpid(pid, &wait_status, options);
@@ -48,10 +53,16 @@ class Debugger {
         }
 
         void handle_command(string line) {
+            // Given a line input from the user, check if they have entered a valid command,
+            // and if they have, perform it
+
+            // Split the input line into individual 'tokens'
             vector<string> tokens = split(line, " ");
+            // Get the name of the command being used (the first token input by the user)
             string command = is_command(tokens[0]);
 
             // Perform an action depending on the type of command entered by the user
+            // (if invalid, command = "not a command")
             if (command == "quit") {
                 exit(EXIT_SUCCESS);
             } else if (command == "continue") {
@@ -92,6 +103,8 @@ class Debugger {
         }
 
         void continue_execution() {
+            // Allow the debugee process to continue executing the program
+            // until control is passed back to the debugger process
             ptrace(PT_CONTINUE, pid, nullptr, 0);
 
             int wait_status;
