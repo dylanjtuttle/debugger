@@ -110,37 +110,24 @@ int main(int argc, char *argv[]) {
 
     // Otherwise, the second command-line argument is the filename of the program to debug
     char *program_name = argv[1];
-    // cout << "Program name: " << program_name << '\n';
 
     // Create two processes - one for the program being debugged, and one for the debugger
     pid_t pid = fork();
 
     if (pid == DEBUGEE) {
         // execute program being debugged
-        // cout << "Child process " << pid << ", execute debugee\n";
 
         // Allow the parent process to control this process
         long code = ptrace(PT_TRACE_ME, DEBUGEE, nullptr, 0);
-        /*
-        if (code == ESRCH || code == EINVAL || code == EBUSY || code == EPERM || code = -1) {
-            std::cerr << "Unable to take control of debugee\n";
-        }
-        */
         execl(program_name, program_name);
-
     }
 
     if (pid >= DEBUGGER) {
         // execute debugger
-        // cout << "Parent process " << pid << ", execute debugger\n";
 
         Debugger debug(program_name, pid);
         debug.run();
     }
 
     return 0;
-}
-
-void handle_command(char *line) {
-    cout << line << '\n';
 }
