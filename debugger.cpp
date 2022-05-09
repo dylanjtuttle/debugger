@@ -5,7 +5,6 @@
 #include <sys/ptrace.h>
 #include <vector>
 #include <string.h>
-// #include "linenoise/linenoise.h"
 
 using std::cout; using std::string; using std::vector;
 
@@ -21,8 +20,8 @@ class Debugger {
 
     public:
         Debugger(char *prog_name, pid_t id) {
-            // Construct the Debugger object with the name of the program to be debugged
-            // and the process ID of the debugger
+            /* Construct the Debugger object with the name of the program to be debugged
+               and the process ID of the debugger */
             program_name = prog_name;
             pid = id;
 
@@ -53,16 +52,16 @@ class Debugger {
         }
 
         void handle_command(string line) {
-            // Given a line input from the user, check if they have entered a valid command,
-            // and if they have, perform it
+            /* Given a line input from the user, check if they have entered a valid command,
+               and if they have, perform it */
 
             // Split the input line into individual 'tokens'
             vector<string> tokens = split(line, " ");
             // Get the name of the command being used (the first token input by the user)
             string command = is_command(tokens[0]);
 
-            // Perform an action depending on the type of command entered by the user
-            // (if invalid, command = "not a command")
+            /* Perform an action depending on the type of command entered by the user
+               (if invalid, command = "not a command") */
             if (command == "quit") {
                 exit(EXIT_SUCCESS);
             } else if (command == "continue") {
@@ -82,8 +81,8 @@ class Debugger {
                 match = true;
 
                 // Loop through each character in the token and compare with the current command
-                // If each character in the token matches the corresponding character in the command,
-                // we can consider them a match. Otherwise, move on to the next command
+                /* If each character in the token matches the corresponding character in the command,
+                   we can consider them a match. Otherwise, move on to the next command */
                 for (int c = 0; c < token.size(); c++) {
                     if (token[c] != command[c]) {
                         match = false;
@@ -92,8 +91,8 @@ class Debugger {
                 }
 
                 // This means the user doesn't have to write the entire command when they enter it
-                // For example, if the user wants to enter the "continue" command,
-                // they could enter "continue", or "contin", or "cont", or "c", or anything in between
+                /* For example, if the user wants to enter the "continue" command,
+                   they could enter "continue", or "contin", or "cont", or "c", or anything in between */
                 if (match) {
                     return command;
                 }
@@ -118,8 +117,8 @@ class Debugger {
         }
 
         void continue_execution() {
-            // Allow the debugee process to continue executing the program
-            // until control is passed back to the debugger process
+            /* Allow the debugee process to continue executing the program
+               until control is passed back to the debugger process */
             ptrace(PT_CONTINUE, pid, nullptr, 0);
 
             int wait_status;
@@ -143,7 +142,7 @@ int main(int argc, char *argv[]) {
     pid_t pid = fork();
 
     if (pid == DEBUGEE) {
-        // execute program being debugged
+        // Execute program being debugged
 
         // Allow the parent process to control this process
         long code = ptrace(PT_TRACE_ME, DEBUGEE, nullptr, 0);
@@ -151,7 +150,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (pid >= DEBUGGER) {
-        // execute debugger
+        // Execute debugger
 
         Debugger debug(program_name, pid);
         debug.run();
