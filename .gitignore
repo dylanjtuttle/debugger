@@ -1,3 +1,11 @@
+# Dependencies
+linenoise/
+libelfin/
+
+# Misc
+debug
+.vscode/
+
 # Prerequisites
 *.d
 
