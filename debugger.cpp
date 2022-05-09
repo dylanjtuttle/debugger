@@ -74,12 +74,27 @@ class Debugger {
         string is_command(string token) {
             // Checks if a token is a valid command, and if it is, return that command
 
+            bool match = true;
+
             // Loop through the list of valid commands
             for (int i = 0; i < command_list.size(); i++) {
                 string command = command_list[i];
-                if (token == command || (token.size() == 1 && token[0] == command[0])) {
-                    // If the token matches one of the commands or it is a single character
-                    // which matches the first character of one of the commands, return true
+                match = true;
+
+                // Loop through each character in the token and compare with the current command
+                // If each character in the token matches the corresponding character in the command,
+                // we can consider them a match. Otherwise, move on to the next command
+                for (int c = 0; c < token.size(); c++) {
+                    if (token[c] != command[c]) {
+                        match = false;
+                        break;
+                    }
+                }
+
+                // This means the user doesn't have to write the entire command when they enter it
+                // For example, if the user wants to enter the "continue" command,
+                // they could enter "continue", or "contin", or "cont", or "c", or anything in between
+                if (match) {
                     return command;
                 }
             }
