@@ -4,19 +4,80 @@
 #include <sys/types.h>
 #include <sys/ptrace.h>
 #include <vector>
+#include <unordered_map>
 #include <string.h>
 
-using std::cout; using std::string; using std::vector;
+using std::cout; using std::cin; using std::cerr;
+using std::string;
+using std::vector; using std::unordered_map;
 
 enum {
     DEBUGEE = 0,  // pid for child process
     DEBUGGER = 1  // pid for parent process
 };
 
+class Breakpoint {
+        pid_t pid;
+        caddr_t address;
+        bool enabled;
+        uint8_t saved_data;
+
+    public:
+        Breakpoint(pid_t p, caddr_t a) {
+            pid = p;
+            address = a;
+            enabled = false;
+            saved_data = 0;
+        }
+
+        Breakpoint() {
+            enabled = false;
+        }
+
+        void enable() {
+            // Read data from the breakpoint address
+            int data = ptrace(PT_READ_D, pid, address, 0);
+
+            // Save the least significant byte from that data
+            saved_data = static_cast<uint8_t>(data & 0xff);
+
+            // Set that same least significant byte from that data to 0xcc (int3)
+            uint64_t int3 = 0xcc;
+            uint64_t data_with_int3 = ((data & ~0xff) | int3);
+
+            // Write this updated data back to the same address
+            ptrace(PT_WRITE_D, pid, address, data_with_int3);
+
+            enabled = true;
+        }
+
+        void disable() {
+            // Read data from the breakpoint address
+            int data = ptrace(PT_READ_D, pid, address, 0);
+
+            // Remove the 0xcc from the least significant byte and replace it with the original data
+            uint64_t restored_data = ((data & ~0xff) | saved_data);
+
+            // Write the restored data back to the same address
+            ptrace(PT_WRITE_D, pid, address, restored_data);
+
+            enabled = false;
+        }
+
+        bool is_enabled() {
+            return enabled;
+        }
+
+        caddr_t get_address() {
+            return address;
+        }
+};
+
 class Debugger {
     string program_name;
     pid_t pid;
     vector<string> command_list;
+    unordered_map<string, Breakpoint> breakpoints;
 
     public:
         Debugger(char *prog_name, pid_t id) {
@@ -26,8 +87,8 @@ class Debugger {
             pid = id;
 
             // Create a vector of valid commands to be checked against every time the user tries to enter a command
-            int num_commands = 2;
-            string commands[] = {"quit", "continue"};
+            int num_commands = 3;
+            string commands[] = {"quit", "continue", "break"};
             for (int i = 0; i < num_commands; i++) {
                 command_list.push_back(commands[i]);
             }
@@ -46,7 +107,7 @@ class Debugger {
             while (true) {
                 cout << "(debugger) ";
                 string line;
-                getline(std::cin, line, '\n');
+                getline(cin, line, '\n');
                 handle_command(line);
             }
         }
@@ -67,6 +128,11 @@ class Debugger {
             } else if (command == "continue") {
                 cout << "Continuing execution now\n";
                 continue_execution();
+            } else if (command == "break") {
+                const char *addr = tokens[1].c_str();
+                set_breakpoint(addr);
+            } else {
+                cout << "Not a recognized command\n";
             }
         }
 
@@ -119,11 +185,27 @@ class Debugger {
         void continue_execution() {
             /* Allow the debugee process to continue executing the program
                until control is passed back to the debugger process */
-            ptrace(PT_CONTINUE, pid, nullptr, 0);
+            // (caddr_t)1 tells ptrace to allow the debugee process to continue executing from where it left off
+            ptrace(PT_CONTINUE, pid, (caddr_t)1, 0);
 
             int wait_status;
             int options = 0;
             waitpid(pid, &wait_status, options);
+        }
+
+        void set_breakpoint(const char *b_addr) {
+            cout << "Set breakpoint at address 0x" << std::hex << b_addr << '\n';
+
+            // char *addr;
+            // strcpy(addr, b_addr);
+            // void *v_addr = addr;
+            // caddr_t c_addr = (caddr_t)v_addr;
+
+            // Create a new Breakpoint object at the given address, enable it, and store it in the map of breakpoints
+            Breakpoint new_breakpoint(pid, (caddr_t)b_addr);
+            new_breakpoint.enable();
+            string str_addr(b_addr);
+            breakpoints[str_addr] = new_breakpoint;
         }
 };
 
@@ -131,7 +213,7 @@ int main(int argc, char *argv[]) {
 
     // If the user hasn't given a program name to debug, we need to exit with an error
     if (argc < 2) {
-        std::cerr << "No program given to debug\n";
+        cerr << "No program given to debug\n";
         return EXIT_FAILURE;
     }
 
@@ -146,7 +228,7 @@ int main(int argc, char *argv[]) {
 
         // Allow the parent process to control this process
         long code = ptrace(PT_TRACE_ME, DEBUGEE, nullptr, 0);
-        execl(program_name, program_name);
+        execl(program_name, program_name, (char *)0);
     }
 
     if (pid >= DEBUGGER) {
