@@ -6,6 +6,8 @@
 #include <vector>
 #include <unordered_map>
 #include <string.h>
+#include <syscall.h>
+#include <sys/personality.h>
 
 using std::cout; using std::cin; using std::cerr;
 using std::string;
@@ -18,12 +20,12 @@ enum {
 
 class Breakpoint {
         pid_t pid;
-        caddr_t address;
+        std::intptr_t address;
         bool enabled;
         uint8_t saved_data;
 
     public:
-        Breakpoint(pid_t p, caddr_t a) {
+        Breakpoint(pid_t p, std::intptr_t a) {
             pid = p;
             address = a;
             enabled = false;
@@ -36,7 +38,7 @@ class Breakpoint {
 
         void enable() {
             // Read data from the breakpoint address
-            int data = ptrace(PT_READ_D, pid, address, 0);
+            int data = ptrace(PTRACE_PEEKDATA, pid, address, nullptr);
 
             // Save the least significant byte from that data
             saved_data = static_cast<uint8_t>(data & 0xff);
@@ -46,20 +48,20 @@ class Breakpoint {
             uint64_t data_with_int3 = ((data & ~0xff) | int3);
 
             // Write this updated data back to the same address
-            ptrace(PT_WRITE_D, pid, address, data_with_int3);
+            ptrace(PTRACE_POKEDATA, pid, address, data_with_int3);
 
             enabled = true;
         }
 
         void disable() {
             // Read data from the breakpoint address
-            int data = ptrace(PT_READ_D, pid, address, 0);
+            int data = ptrace(PTRACE_PEEKDATA, pid, address, nullptr);
 
             // Remove the 0xcc from the least significant byte and replace it with the original data
             uint64_t restored_data = ((data & ~0xff) | saved_data);
 
             // Write the restored data back to the same address
-            ptrace(PT_WRITE_D, pid, address, restored_data);
+            ptrace(PTRACE_POKEDATA, pid, address, restored_data);
 
             enabled = false;
         }
@@ -68,7 +70,7 @@ class Breakpoint {
             return enabled;
         }
 
-        caddr_t get_address() {
+        std::intptr_t get_address() {
             return address;
         }
 };
@@ -77,7 +79,7 @@ class Debugger {
     string program_name;
     pid_t pid;
     vector<string> command_list;
-    unordered_map<string, Breakpoint> breakpoints;
+    unordered_map<std::intptr_t, Breakpoint> breakpoints;
 
     public:
         Debugger(char *prog_name, pid_t id) {
@@ -129,8 +131,8 @@ class Debugger {
                 cout << "Continuing execution now\n";
                 continue_execution();
             } else if (command == "break") {
-                const char *addr = tokens[1].c_str();
-                set_breakpoint(addr);
+                string addr = tokens[1];
+                set_breakpoint(std::stol(addr, 0, 0));  // Last parameter is 0, so it will set the base of the number based on the prefix (e.g. 0x = hex)
             } else {
                 cout << "Not a recognized command\n";
             }
@@ -186,26 +188,20 @@ class Debugger {
             /* Allow the debugee process to continue executing the program
                until control is passed back to the debugger process */
             // (caddr_t)1 tells ptrace to allow the debugee process to continue executing from where it left off
-            ptrace(PT_CONTINUE, pid, (caddr_t)1, 0);
+            ptrace(PTRACE_CONT, pid, nullptr, nullptr);
 
             int wait_status;
             int options = 0;
             waitpid(pid, &wait_status, options);
         }
 
-        void set_breakpoint(const char *b_addr) {
-            cout << "Set breakpoint at address 0x" << std::hex << b_addr << '\n';
-
-            // char *addr;
-            // strcpy(addr, b_addr);
-            // void *v_addr = addr;
-            // caddr_t c_addr = (caddr_t)v_addr;
+        void set_breakpoint(std::intptr_t addr) {
+            cout << "Set breakpoint at address 0x" << std::hex << addr << '\n';
 
             // Create a new Breakpoint object at the given address, enable it, and store it in the map of breakpoints
-            Breakpoint new_breakpoint(pid, (caddr_t)b_addr);
+            Breakpoint new_breakpoint(pid, addr);
             new_breakpoint.enable();
-            string str_addr(b_addr);
-            breakpoints[str_addr] = new_breakpoint;
+            breakpoints[addr] = new_breakpoint;
         }
 };
 
@@ -224,11 +220,13 @@ int main(int argc, char *argv[]) {
     pid_t pid = fork();
 
     if (pid == DEBUGEE) {
-        // Execute program being debugged
+        // Execute program being debugge
+
+        personality(ADDR_NO_RANDOMIZE);
 
         // Allow the parent process to control this process
-        long code = ptrace(PT_TRACE_ME, DEBUGEE, nullptr, 0);
-        execl(program_name, program_name, (char *)0);
+        long code = ptrace(PTRACE_TRACEME, DEBUGEE, nullptr, nullptr);
+        execl(program_name, program_name, nullptr);
     }
 
     if (pid >= DEBUGGER) {
